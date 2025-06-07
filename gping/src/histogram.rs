@@ -1,10 +1,10 @@
-use ratatui::{
+use tui::{
     buffer::Buffer,
     layout::Rect,
     symbols,
     style::{Color, Style, Stylize},
     text::Line,
-    widgets::{Axis, Block, Chart, Dataset, GraphType, Widget},
+    widgets::{Axis, Block, Chart, Dataset, GraphType, Padding, Widget},
 };
 
 #[derive(Debug)]
@@ -94,7 +94,7 @@ impl HistogramState {
         let dataset = self.dataset();
 
         Chart::new(vec![dataset])
-            .block(Block::bordered().title_top(Line::from("Response Histogram (ms)").bold().centered()))
+            .block(Block::new().padding(Padding{ left: 2, right: 2, top: 2, bottom: 2}).title_top(Line::from("Response Histogram (ms)").bold().centered()))
             .x_axis(
                 Axis::default()
                 .bounds([0.0, max_bin as f64])
