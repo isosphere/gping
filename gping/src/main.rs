@@ -147,10 +147,7 @@ impl App {
     fn update(&mut self, host_idx: usize, item: Option<Duration>) {
         let host = &mut self.data[host_idx];
         host.update(item);
-
-        if let Some(d) = item {
-            self.histogram.add_sample(&(d.as_millis() as u64)); // FIXME: crime commited here
-        }
+        self.histogram.add_sample(item);
     }
 
     fn y_axis_bounds(&self) -> [f64; 2] {
