@@ -2,7 +2,7 @@ use core::time::Duration;
 
 use tui::{
     buffer::Buffer,
-    layout::Rect,
+    layout::{Layout, Constraint, Flex, Rect},
     symbols,
     style::{Color, Style},
     text::Line,
@@ -12,10 +12,13 @@ use tui::{
 /// defines the x-axis extent, effectively a zoom parameter
 const OVERFLOW_SIZE : usize = 15;
 
+const DEFAULT_WINDOW_SIZE : usize = 500;
+
 #[derive(Debug)]
 pub struct HistogramState {
+    pub enabled: bool,
     /// the raw data used to compute the histogram
-    /// the length of this cannot exceed if let Some(window_size) = self.window_size
+    /// the length of this cannot exceed window_size, if set
     pub samples : Vec<u64>,
     /// how many samples to use when generating the historgram
     /// if None, all samples will be used without limit.
@@ -30,7 +33,6 @@ pub struct HistogramState {
 
 impl Default for HistogramState {
     fn default() -> Self {
-        // TODO: use a binning algorithm. maybe steal from here: https://docs.rs/oxygraph/latest/src/oxygraph/bipartite.rs.html#493-546
         let bin_buckets: Vec<u64> = [
             ( 1   .. 50   ).step_by(1).collect::<Vec<i64>>(), 
             ( 50  .. 250   ).step_by(5).collect::<Vec<i64>>(),
@@ -39,26 +41,32 @@ impl Default for HistogramState {
 
         HistogramState { 
             samples: Vec::new(), 
-            window_size: Some(500), 
+            window_size: Some(DEFAULT_WINDOW_SIZE), 
             bin_counts: vec![0; bin_buckets.len()],
             plot_data: Vec::new(),
             overflow_bin: bin_buckets[bin_buckets.len() - 1],
             max_bin: 0,
             max_count: 0,
+            enabled: false,
             bin_buckets,
         }
     }
 }
 
-impl HistogramState {
-    fn _bin_index(&self, x: &u64) -> usize {
-        for i in 0 .. self.bin_buckets.len() {
-            if *x <= self.bin_buckets[i] {
-                return i
-            }
-        }
 
-        self.bin_buckets.len() - 1
+/// helper function to create a top-right rect using a count of lines of the available rect `r`
+/// modified from https://ratatui.rs/examples/apps/popup/
+fn popup_area(area: Rect, consume_y: u16) -> Rect {
+    let vertical = Layout::vertical([Constraint::Length(consume_y)]).flex(Flex::Start);
+    let horizontal = Layout::horizontal([Constraint::Fill(1), Constraint::Min(20)]);
+    let [area] = vertical.areas(area);
+    let [_, area] = horizontal.areas(area);
+    area
+}
+
+impl HistogramState {
+    pub fn toggle(&mut self) {
+        self.enabled = !self.enabled;
     }
 
     pub fn add_sample(&mut self, x: Option<Duration>) {
@@ -83,10 +91,23 @@ impl HistogramState {
             }
         }
 
-        self.update()
+        // we collect data when disabled, but we don't do anything else.
+        if self.enabled {
+            self.update();
+        }
     }
 
-    //  FIXME: not efficient, recalculates from scratch 
+    fn _bin_index(&self, x: &u64) -> usize {
+        for i in 0 .. self.bin_buckets.len() {
+            if *x <= self.bin_buckets[i] {
+                return i
+            }
+        }
+
+        self.bin_buckets.len() - 1
+    }    
+
+    // FIXME: not efficient, recalculates from scratch 
     fn update_bins(&mut self) {
         // initialize
         let n = self.bin_counts.len();
@@ -154,11 +175,18 @@ impl HistogramState {
             )
             .render(*area, buffer);  
 
+        let stats_area = popup_area(*area, 3 + 2);
         let stats_text = vec![
             Line::from(vec![
-                format!("Samples: {} Mode: {} ms Overflow >= {} ms", self.samples.len(), self.max_bin, self.overflow_bin).into(),
-            ])
+                format!("Samples: {}", self.samples.len()).into(),
+            ]),
+            Line::from(vec![
+                format!("Mode: {} ms", self.max_bin).into(),
+            ]),
+            Line::from(vec![
+                format!("Overflow >= {} ms", self.overflow_bin).into(),
+            ])            
         ];
-        Paragraph::new(stats_text).block(Block::bordered().title("Histogram")).render(*area, buffer);
+        Paragraph::new(stats_text).block(Block::bordered().title("Stats")).render(stats_area, buffer);
     }
 }
